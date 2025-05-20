@@ -1,0 +1,141 @@
+---
+title: "BGN239 Homework T1D GWAS"
+author: "Aditi Jantikar"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## T1D Summary statistics
+
+Read in summary statistics from the following 2021 genome-wide association study of type 1 diabetes (T1D).
+This study was led by Josh Chiou in the Gaulton lab at UCSD.
+
+https://www.nature.com/articles/s41586-021-03552-w
+
+
+The full dataset contains >62 million SNPs. I have filtered it to remove all SNPs with p values > 0.001, leaving about 600 thousand SNPs.
+
+```{r}
+
+t1d.gwas.tab <- read.table("t1d_gwas_hg38_pruned2_w_genome_pos.tsv.gz", header=T)
+head(t1d.gwas.tab)
+
+
+```
+
+The following excercises ask questions about the GWAS results. Use some R code and the genome browser to help you answer the questions.
+
+
+### Exercise 1:
+
+Make a Manhatten plot showing the results from this GWAS. Note that cumulative genome position information is provided,
+but the column name has changed to 'genome.pos.hg38' to reflect the fact that the positions are on the hg38, rather than hg19, genome assembly. Also note that the chromosome names are like 'chr2', not '2' as with the RA file.
+
+ANSWER:
+
+```{r}
+# Load libraries
+library(ggplot2)
+library(dplyr)
+```
+```{r}
+library(data.table); sumstats <- fread("t1d_gwas_hg38_pruned2_w_genome_pos.tsv.gz")
+```
+
+
+```{r}
+t1d.gwas <- read.table("t1d_gwas_hg38_pruned2_w_genome_pos.tsv.gz", header = TRUE)
+
+t1d.gwas$chrom <- factor(t1d.gwas$chrom, levels = paste0("chr", 1:22))
+
+# Manhattan plot
+ggplot(t1d.gwas, aes(x = genome.pos.hg38, y = -log10(p.val), color = chrom)) +
+  geom_point(alpha = 0.6, size = 0.5) +
+  scale_y_continuous(name = "-log10(p-value)") +
+  labs(title = "Manhattan Plot of T1D GWAS", x = "Genomic Position (hg38)") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_hline(yintercept = -log10(5e-8), color = "red", linetype = "dashed")
+
+```
+
+
+### Exercise 2
+
+The MHC/HLA region on chromosome 6 is again the most significant region of assocqiation. Where does most of MHC signal appear to come from? MHC Class 1 or MHC Class 2?
+
+```{r}
+library(ggplot2)
+```
+
+
+```{r}
+table(t1d.gwas$chrom)
+```
+```{r}
+head(t1d.gwas[, c("chrom", "chrom.pos.hg38", "genome.pos.hg38")])
+```
+
+```{r}
+unique(sumstats$chrom)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+
+sumstats <- fread("t1d_gwas_hg38_pruned2_w_genome_pos.tsv.gz")
+
+sumstats[, chrom := as.numeric(gsub("chr", "", chrom))]
+
+sumstats[, p.val := as.numeric(p.val)]
+
+mhc_region <- sumstats[chrom == 6 & chrom.pos.hg38 >= 25000000 & chrom.pos.hg38 <= 35000000]
+
+
+mhc_region <- mhc_region[!is.na(p.val)]
+
+
+mhc_region[, logp := -log10(p.val)]
+
+ggplot(mhc_region, aes(x = chrom.pos.hg38, y = logp)) +
+  geom_point(size = 0.7, color = "blue") +
+  #  Class I region 
+  geom_rect(aes(xmin = 29000000, xmax = 33000000, ymin = 0, ymax = Inf),
+            fill = "darkgreen", alpha = 0.2) +  # Class I region
+  # Add Class II region
+  geom_rect(aes(xmin = 32400000, xmax = 33500000, ymin = 0, ymax = Inf),
+            fill = "salmon", alpha = 0.2) +     # Class II region
+  
+  labs(title = "MHC Region (Chr6)",
+       x = "Genomic Position (hg38)",
+       y = expression(-log[10](p-value))) 
+  theme_minimal() 
+  
+```
+
+
+Most of the MHC signal appears to come from MHC Class II genes.
+
+
+### Exercise 3
+
+What are the next two top hits after MHC? Where are they located? What are some nearby genes?
+
+```{r}
+#Filtering out the MHC region
+not_mhc <- t1d.gwas.tab %>%
+  filter(!(chrom == "chr6" & chrom.pos.hg38 >= 29900000 & chrom.pos.hg38 <= 33400000))
+
+#Get top SNPs
+top_hits <- not_mhc %>%
+  arrange(p.val) %>%
+  slice(1:2)
+top_hits
+```
+
+Using the UCSC Genome browser, the next two top hits are located between 2160000 and 2161000. 
+
+
